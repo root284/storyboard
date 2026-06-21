@@ -998,7 +998,7 @@ ${gkontiText}`;
             <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
               <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: C.inkSoft }}>
                 <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontWeight: 600, fontSize: 11 }}>목표</span>
-                <input type="range" min={5} max={15} value={seconds} onChange={e => setSeconds(Number(e.target.value))} style={{ accentColor: C.red }} />
+                <input type="range" min={5} max={60} value={seconds} onChange={e => setSeconds(Number(e.target.value))} style={{ accentColor: C.red }} />
                 <span style={{ fontFamily: "'IBM Plex Mono', monospace", color: C.red, fontWeight: 700, minWidth: 28, fontSize: 13 }}>{seconds}s</span>
               </label>
               <button onClick={runStage1} disabled={loading1 || !rawInput.trim()}
