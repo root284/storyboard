@@ -690,7 +690,7 @@ ${gkontiText}`;
     abortRef.current = new AbortController();
     setLoading2(true); setError(""); setCuts(null); setPanelImages({});
     try {
-      const text = await callClaude(buildStage2Prompt(), 4096, abortRef.current.signal);
+      const text = await callClaude(buildStage2Prompt(), 16000, abortRef.current.signal);
       const clean = text.replace(/```json|```/g, "").trim();
       const s = clean.indexOf("{"), e = clean.lastIndexOf("}");
       const parsed = JSON.parse(clean.slice(s, e + 1));
