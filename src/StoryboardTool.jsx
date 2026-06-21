@@ -1,5 +1,5 @@
 import React, { useState, useRef, useId, useEffect, useCallback } from "react";
-import { Loader2, Copy, Check, Download, Clapperboard, AlertTriangle, Upload, ImagePlus, FileImage, UserCircle2, Image, Trash2, Wand2, Film, ChevronDown, ChevronUp, Square, Save } from "lucide-react";
+import { Loader2, Copy, Check, Download, Clapperboard, AlertTriangle, Upload, ImagePlus, FileImage, Trash2, Wand2, Film, ChevronDown, ChevronUp, Square, Save } from "lucide-react";
 
 const C = {
   paper: "#efe9dd", panel: "#f7f3ea", ink: "#16130f",
@@ -246,23 +246,6 @@ function readFileAsDataURL(file, onResult) {
   reader.readAsDataURL(file);
 }
 
-// localStorage 용량 한도를 넘기지 않도록 레퍼런스 이미지를 리사이즈·압축
-function readFileAsResizedDataURL(file, onResult, maxDim = 1024, quality = 0.85) {
-  readFileAsDataURL(file, (rawDataURL) => {
-    const img = new window.Image();
-    img.onload = () => {
-      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-      const w = Math.round(img.width * scale);
-      const h = Math.round(img.height * scale);
-      const canvas = document.createElement("canvas");
-      canvas.width = w; canvas.height = h;
-      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-      onResult(canvas.toDataURL("image/jpeg", quality));
-    };
-    img.src = rawDataURL;
-  });
-}
-
 // (extractKeyFrames removed — video sent directly to Gemini server-side)
 
 async function extractKeyFrames_UNUSED(file, onProgress, signal) {
@@ -387,12 +370,6 @@ export default function StoryboardTool() {
   const [copiedNo, setCopiedNo] = useState(null);
   const [exporting, setExporting] = useState(false);
 
-  // 레퍼런스 이미지 — 이름만 관리, 묘사는 프롬프트에 넣지 않음
-  const [charRefs, setCharRefs] = useState([]); // [{id, name, dataURL}]
-  const [bgRef, setBgRef] = useState(null);      // {dataURL}
-  const charFileRef = useRef(null);
-  const bgFileRef = useRef(null);
-
   // 중단 컨트롤러
   const abortRef = useRef(null);
   const cancelAll = () => { abortRef.current?.abort(); };
@@ -422,8 +399,6 @@ export default function StoryboardTool() {
       if (d.cutCount !== undefined) setCutCount(d.cutCount);
       if (d.gkontiText) setGkontiText(d.gkontiText);
       if (d.cuts) { setCuts(d.cuts); setMetadata(d.metadata ?? null); }
-      if (d.charRefs) setCharRefs(d.charRefs);
-      if (d.bgRef) setBgRef(d.bgRef);
       if (d.videoAnalysis) { setVideoAnalysis(d.videoAnalysis); setVideoName(d.videoName ?? ""); }
       if (d.savedAt) setSavedAt(d.savedAt);
     } catch {}
@@ -437,37 +412,20 @@ export default function StoryboardTool() {
   const saveData = useCallback(() => {
     try {
       const now = new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
-      const d = { rawInput, seconds, cutCount, gkontiText, cuts, metadata, charRefs, bgRef, videoAnalysis, videoName, savedAt: now };
+      const d = { rawInput, seconds, cutCount, gkontiText, cuts, metadata, videoAnalysis, videoName, savedAt: now };
       localStorage.setItem("sb_save", JSON.stringify(d));
       setSavedAt(now);
     } catch {
       setError("저장 공간이 부족해 레퍼런스/저장 내용이 누락될 수 있습니다. 이미지를 줄이거나 일부를 삭제해주세요.");
     }
     try { localStorage.setItem("sb_images", JSON.stringify(panelImages)); } catch {}
-  }, [rawInput, seconds, cutCount, gkontiText, cuts, metadata, charRefs, bgRef, videoAnalysis, videoName, panelImages]);
+  }, [rawInput, seconds, cutCount, gkontiText, cuts, metadata, videoAnalysis, videoName, panelImages]);
 
   useEffect(() => {
     const t = setTimeout(saveData, 2000);
     return () => clearTimeout(t);
   }, [saveData]);
 
-
-  const addCharRef = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const name = file.name.replace(/\.[^.]+$/, "");
-    readFileAsResizedDataURL(file, dataURL =>
-      setCharRefs(prev => [...prev, { id: Date.now(), name, dataURL }])
-    );
-    e.target.value = "";
-  };
-
-  const addBgRef = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    readFileAsResizedDataURL(file, dataURL => setBgRef({ dataURL }));
-    e.target.value = "";
-  };
 
   const handleVideoUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -569,15 +527,6 @@ ${rawInput.trim()}`;
   };
 
   const buildStage2Prompt = () => {
-    const charNames = charRefs.map(c => c.name).join(", ");
-    const hasChars = charRefs.length > 0;
-    const hasBg = !!bgRef;
-    const hasRefs = hasChars || hasBg;
-
-    const refNote = hasRefs
-      ? `[등록된 레퍼런스 이미지]\n${hasChars ? `- 캐릭터 시트: ${charNames}` : ""}${hasBg ? "\n- 배경 레퍼런스: 1장" : ""}\n\n위 레퍼런스 이미지는 사용자가 이미지 생성 툴에 직접 첨부할 예정입니다. prompt에 캐릭터 외형이나 배경을 텍스트로 묘사하지 말고, 대신 아래 문구를 프롬프트 끝에 추가하세요:\n${hasChars ? `"Use attached character sheet(s) [${charNames}] as strict visual reference for character appearance — do not alter hair, clothing, or colors."` : ""}${hasBg ? '\n"Use attached background reference image for environment and setting."' : ""}\n`
-      : "";
-
     return `당신은 애니메이션 연출/콘티 전문가입니다. 아래 글 콘티를 구조화된 JSON으로 변환하세요.
 
 [통제 어휘]
@@ -585,7 +534,7 @@ ${rawInput.trim()}`;
 - camera: FIX / PAN / TILT / T.U. / T.B. / 이동 / 흘림
 - transition: cut / O.L. / F.I. / F.O. / 화이트 / 블랙
 
-${refNote}[컷 수 규칙 — 최우선]
+[컷 수 규칙 — 최우선]
 ${cutCount
   ? `- 출력 컷 수는 반드시 정확히 ${cutCount}장
 - 글 콘티의 원본 컷이 ${cutCount}장보다 적으면, 아래 방법으로 분할하여 ${cutCount}장을 채울 것:
@@ -601,11 +550,11 @@ ${cutCount
 [prompt 작성 규칙]
 - 영어로 작성, 30~50단어
 - 포함 필수: ① 샷 사이즈·앵글 ② 장면 상황·동작 ③ 조명·색감 ④ 아트 스타일 ⑤ aspect ratio 16:9
-- 캐릭터 외형(헤어·의상·색상)은 텍스트로 묘사하지 말 것${hasRefs ? " — 레퍼런스 참조 문구로 대체" : ""}
+- 캐릭터 외형(헤어·의상·색상)과 배경/환경을 구체적으로 묘사할 것 — 이 프롬프트만으로 다른 이미지 생성 AI에서 바로 활용 가능해야 함
 - 아트 스타일은 글 콘티 톤 반영 (예: anime cel-shading, cinematic illustration 등)
 
 [출력] JSON만. 마크다운·설명 금지.
-{"tone":"...","emotionArc":"...","artStyle":"(영어 한 줄)","cuts":[{"no":1,"size":"","angle":"eye-level/부감/앙각","camera":"","sec":2.0,"emotion":"","desc":"","action":"","dialogue":"","transition":"","prompt":"30-50 words, no character appearance description"}]}
+{"tone":"...","emotionArc":"...","artStyle":"(영어 한 줄)","cuts":[{"no":1,"size":"","angle":"eye-level/부감/앙각","camera":"","sec":2.0,"emotion":"","desc":"","action":"","dialogue":"","transition":"","prompt":"30-50 words, self-contained, includes character appearance and background"}]}
 
 [글 콘티]
 ${gkontiText}`;
@@ -818,8 +767,8 @@ ${gkontiText}`;
         <div style={{ border: `1.5px solid ${C.line}`, background: C.panel, marginBottom: 20 }}>
           <div style={{ padding: "10px 14px", borderBottom: `1px solid ${C.lineSoft}`, display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, fontWeight: 700, color: C.inkSoft }}>REF</span>
-            <span style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 15 }}>캐릭터 시트 · 배경 레퍼런스</span>
-            <span style={{ marginLeft: "auto", fontSize: 11, color: C.inkSoft }}>이름이 프롬프트에 참조 문구로 자동 삽입됨</span>
+            <span style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, fontSize: 15 }}>영상 레퍼런스</span>
+            <span style={{ marginLeft: "auto", fontSize: 11, color: C.inkSoft }}>연출 스타일이 글콘티 생성 시 반영됨</span>
           </div>
           <div style={{ padding: 14, display: "flex", gap: 0, alignItems: "stretch" }}>
 
@@ -827,7 +776,6 @@ ${gkontiText}`;
             {(() => {
               const BOX = 120;
               const labelStyle = { fontSize: 10.5, fontFamily: "'IBM Plex Mono', monospace", color: C.inkSoft, fontWeight: 600, marginBottom: 8 };
-              const dividerStyle = { width: 1, background: C.lineSoft, alignSelf: "stretch", margin: "0 16px" };
               const addBox = (icon, lines) => (
                 <div style={{ width: BOX, height: BOX, border: `1.5px dashed ${C.line}`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 5, cursor: "pointer", background: "#fffdf8", flexShrink: 0 }}>
                   {icon}
@@ -836,55 +784,6 @@ ${gkontiText}`;
               );
 
               return (<>
-                {/* ── 캐릭터 시트 ── */}
-                <div style={{ display: "flex", flexDirection: "column" }}>
-                  <div style={labelStyle}>캐릭터 시트</div>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {charRefs.map(c => (
-                      <div key={c.id} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                        <div style={{ position: "relative", width: BOX, height: BOX, border: `1.5px solid ${C.ink}`, overflow: "hidden", background: "#ddd5c2" }}>
-                          <img src={c.dataURL} alt={c.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                          <button onClick={() => setCharRefs(prev => prev.filter(x => x.id !== c.id))}
-                            style={{ position: "absolute", top: 3, right: 3, background: C.red, border: "none", borderRadius: 2, cursor: "pointer", display: "flex", padding: 2 }}>
-                            <Trash2 size={10} color={C.paper} />
-                          </button>
-                        </div>
-                        <input value={c.name}
-                          onChange={e => setCharRefs(prev => prev.map(x => x.id === c.id ? { ...x, name: e.target.value } : x))}
-                          style={{ width: BOX, fontSize: 10.5, fontFamily: "'IBM Plex Mono', monospace", color: C.ink, background: "#fffdf8", border: `1px solid ${C.lineSoft}`, borderRadius: 2, padding: "2px 5px", outline: "none" }}
-                        />
-                      </div>
-                    ))}
-                    <div onClick={() => charFileRef.current?.click()}>
-                      {addBox(<UserCircle2 size={22} color={C.inkSoft} />, "추가")}
-                    </div>
-                    <input ref={charFileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={addCharRef} />
-                  </div>
-                </div>
-
-                <div style={dividerStyle} />
-
-                {/* ── 배경 레퍼런스 ── */}
-                <div style={{ display: "flex", flexDirection: "column" }}>
-                  <div style={labelStyle}>배경 레퍼런스</div>
-                  {bgRef ? (
-                    <div style={{ position: "relative", width: BOX, height: BOX, border: `1.5px solid ${C.ink}`, overflow: "hidden", background: "#ddd5c2" }}>
-                      <img src={bgRef.dataURL} alt="bg" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                      <button onClick={() => setBgRef(null)}
-                        style={{ position: "absolute", top: 3, right: 3, background: C.red, border: "none", borderRadius: 2, cursor: "pointer", display: "flex", padding: 2 }}>
-                        <Trash2 size={10} color={C.paper} />
-                      </button>
-                    </div>
-                  ) : (
-                    <div onClick={() => bgFileRef.current?.click()}>
-                      {addBox(<Image size={22} color={C.inkSoft} />, "추가")}
-                    </div>
-                  )}
-                  <input ref={bgFileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={addBgRef} />
-                </div>
-
-                <div style={dividerStyle} />
-
                 {/* ── 영상 레퍼런스 ── */}
                 <div style={{ display: "flex", flexDirection: "column" }}>
                   <div style={labelStyle}>영상 레퍼런스 <span style={{ fontWeight: 400 }}>(선택)</span></div>
