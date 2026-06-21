@@ -253,6 +253,23 @@ function readFileAsDataURL(file, onResult) {
   reader.readAsDataURL(file);
 }
 
+// localStorage 용량 한도를 넘기지 않도록 레퍼런스 이미지를 리사이즈·압축
+function readFileAsResizedDataURL(file, onResult, maxDim = 1024, quality = 0.85) {
+  readFileAsDataURL(file, (rawDataURL) => {
+    const img = new window.Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      onResult(canvas.toDataURL("image/jpeg", quality));
+    };
+    img.src = rawDataURL;
+  });
+}
+
 // (extractKeyFrames removed — video sent directly to Gemini server-side)
 
 async function extractKeyFrames_UNUSED(file, onProgress, signal) {
@@ -366,6 +383,7 @@ async function extractKeyFrames_UNUSED(file, onProgress, signal) {
 export default function StoryboardTool() {
   const [rawInput, setRawInput] = useState(SAMPLE);
   const [seconds, setSeconds] = useState(10);
+  const [cutCount, setCutCount] = useState(""); // 빈 값 = AI가 자동 결정
   const [gkontiText, setGkontiText] = useState("");
   const [cuts, setCuts] = useState(null);
   const [metadata, setMetadata] = useState(null);
@@ -410,6 +428,7 @@ export default function StoryboardTool() {
       const d = JSON.parse(raw);
       if (d.rawInput !== undefined) setRawInput(d.rawInput);
       if (d.seconds !== undefined) setSeconds(d.seconds);
+      if (d.cutCount !== undefined) setCutCount(d.cutCount);
       if (d.gkontiText) setGkontiText(d.gkontiText);
       if (d.cuts) { setCuts(d.cuts); setMetadata(d.metadata ?? null); }
       if (d.charRefs) setCharRefs(d.charRefs);
@@ -427,12 +446,14 @@ export default function StoryboardTool() {
   const saveData = useCallback(() => {
     try {
       const now = new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
-      const d = { rawInput, seconds, gkontiText, cuts, metadata, charRefs, bgRef, videoAnalysis, videoName, savedAt: now };
+      const d = { rawInput, seconds, cutCount, gkontiText, cuts, metadata, charRefs, bgRef, videoAnalysis, videoName, savedAt: now };
       localStorage.setItem("sb_save", JSON.stringify(d));
       setSavedAt(now);
-    } catch {}
+    } catch {
+      setError("저장 공간이 부족해 레퍼런스/저장 내용이 누락될 수 있습니다. 이미지를 줄이거나 일부를 삭제해주세요.");
+    }
     try { localStorage.setItem("sb_images", JSON.stringify(panelImages)); } catch {}
-  }, [rawInput, seconds, gkontiText, cuts, metadata, charRefs, bgRef, videoAnalysis, videoName, panelImages]);
+  }, [rawInput, seconds, cutCount, gkontiText, cuts, metadata, charRefs, bgRef, videoAnalysis, videoName, panelImages]);
 
   useEffect(() => {
     const t = setTimeout(saveData, 2000);
@@ -510,7 +531,7 @@ export default function StoryboardTool() {
     const file = e.target.files?.[0];
     if (!file) return;
     const name = file.name.replace(/\.[^.]+$/, "");
-    readFileAsDataURL(file, dataURL =>
+    readFileAsResizedDataURL(file, dataURL =>
       setCharRefs(prev => [...prev, { id: Date.now(), name, dataURL }])
     );
     e.target.value = "";
@@ -519,7 +540,7 @@ export default function StoryboardTool() {
   const addBgRef = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    readFileAsDataURL(file, dataURL => setBgRef({ dataURL }));
+    readFileAsResizedDataURL(file, dataURL => setBgRef({ dataURL }));
     e.target.value = "";
   };
 
@@ -600,7 +621,7 @@ ${videoSection}
 · (원문 의도를 살린 연출 노트 3~5개. 원문에 있는 내용을 뒤집지 말 것)
 
 【컷 구상】
-(타임라인 구간 = 컷. 순서·대사·샷 변경 금지. 전체 약 ${seconds}초. 최소 6컷 이상 구성)
+(타임라인 구간 = 컷. 순서·대사·샷 변경 금지. 전체 약 ${seconds}초${cutCount ? `. 총 ${cutCount}컷으로 구성` : ". 시퀀스 길이에 맞는 적절한 컷 수로 구성"})
 1. [샷 사이즈/앵글] | 화면: ... | 연기: ... | 감정: ... | ~Xs
 2. ...
 
@@ -640,12 +661,16 @@ ${rawInput.trim()}`;
 - transition: cut / O.L. / F.I. / F.O. / 화이트 / 블랙
 
 ${refNote}[컷 수 규칙 — 최우선]
-- 출력 컷 수는 반드시 최소 6장, 최대 8장
-- 글 콘티의 원본 컷이 6장 미만이면, 아래 방법으로 분할하여 6장을 채울 것:
+${cutCount
+  ? `- 출력 컷 수는 반드시 정확히 ${cutCount}장
+- 글 콘티의 원본 컷이 ${cutCount}장보다 적으면, 아래 방법으로 분할하여 ${cutCount}장을 채울 것:
   · 한 장면을 샷 사이즈 변화로 분할 (풀샷 → 미디엄 → 클로즈업 등)
   · 인물 반응 또는 감정 변화 전후를 별도 컷으로 분리
   · 동작의 시작·중간·끝을 각각 컷으로 분리
   · 공간 설정 컷(establishing shot)을 앞에 추가
+- 원본 컷이 ${cutCount}장보다 많으면, 비중이 낮은 컷을 합쳐 ${cutCount}장으로 압축`
+  : `- 컷 수 제한 없음. 글 콘티의 총 시퀀스 길이(약 ${seconds}초)와 내용 밀도를 고려해 적절한 컷 수를 직접 결정할 것
+  · 너무 잘게 쪼개거나 과도하게 압축하지 말고, 한 컷당 평균 1.5~4초 정도의 호흡을 기준으로 판단`}
 - 각 분할 컷의 sec 합계는 원본 씬 총 시간과 동일하게 유지
 
 [prompt 작성 규칙]
@@ -1000,6 +1025,13 @@ ${gkontiText}`;
                 <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontWeight: 600, fontSize: 11 }}>목표</span>
                 <input type="range" min={5} max={60} value={seconds} onChange={e => setSeconds(Number(e.target.value))} style={{ accentColor: C.red }} />
                 <span style={{ fontFamily: "'IBM Plex Mono', monospace", color: C.red, fontWeight: 700, minWidth: 28, fontSize: 13 }}>{seconds}s</span>
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: C.inkSoft }}>
+                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontWeight: 600, fontSize: 11 }}>컷 수</span>
+                <input type="number" min={1} value={cutCount}
+                  onChange={e => setCutCount(e.target.value ? Math.max(1, Number(e.target.value)) : "")}
+                  placeholder="자동"
+                  style={{ width: 56, padding: "4px 6px", border: `1.5px solid ${C.line}`, background: "#fffdf8", color: C.ink, fontSize: 13, borderRadius: 2, outline: "none", textAlign: "center" }} />
               </label>
               <button onClick={runStage1} disabled={loading1 || !rawInput.trim()}
                 style={{ marginLeft: "auto", cursor: loading1 ? "default" : "pointer", display: "inline-flex", alignItems: "center", gap: 7, background: C.ink, color: C.paper, border: "none", padding: "9px 16px", fontFamily: "'Zilla Slab', serif", fontWeight: 700, fontSize: 13, borderRadius: 2, opacity: loading1 || !rawInput.trim() ? 0.5 : 1 }}>
