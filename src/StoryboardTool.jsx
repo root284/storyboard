@@ -73,7 +73,7 @@ function StepBadge({ n, label, active, done }) {
   );
 }
 
-function CutRow({ cut, imageData, onUpload, onCopyPrompt, copied, runningTime, onGenerate, generating, onPromptChange }) {
+function CutRow({ cut, imageData, onUpload, onCopyPrompt, copied, runningTime, onPromptChange }) {
   const fileRef = useRef(null);
   const [promptOpen, setPromptOpen] = useState(false);
   const handleFileChange = (e) => {
@@ -104,19 +104,12 @@ function CutRow({ cut, imageData, onUpload, onCopyPrompt, copied, runningTime, o
 
       {/* 이미지 */}
       <td style={{ width: 260, borderRight: `1.5px solid ${C.ink}`, padding: 0, verticalAlign: "stretch" }}>
-        <div style={{ position: "relative", width: "100%", height: "100%", cursor: generating ? "default" : "pointer", overflow: "hidden" }}
-          onClick={() => !generating && fileRef.current?.click()}>
+        <div style={{ position: "relative", width: "100%", height: "100%", cursor: "pointer", overflow: "hidden" }}
+          onClick={() => fileRef.current?.click()}>
           {imageData
             ? <img src={imageData} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
             : <FramingHint size={cut.size} angle={cut.angle} />
           }
-          {/* 생성 중 오버레이 */}
-          {generating && (
-            <div style={{ position: "absolute", inset: 0, background: "#16130fcc", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8 }}>
-              <Loader2 size={22} color={C.paper} style={{ animation: "spin 1s linear infinite" }} />
-              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: C.paper }}>생성 중…</span>
-            </div>
-          )}
           <div style={{ position: "absolute", left: 5, top: 5, fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: C.inkSoft, background: "#efe9ddcc", padding: "1px 4px", borderRadius: 2 }}>
             {cut.size || "—"} · {cut.angle || "—"}
           </div>
@@ -125,10 +118,6 @@ function CutRow({ cut, imageData, onUpload, onCopyPrompt, copied, runningTime, o
               style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 3, fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, fontWeight: 600, background: copied ? C.ink : "#ffffffcc", color: copied ? C.paper : C.red, border: `1px solid ${C.red}`, padding: "2px 6px", borderRadius: 2 }}>
               {copied ? <Check size={9} /> : <Copy size={9} />}
               {copied ? "복사" : "PROMPT"}
-            </button>
-            <button onClick={(e) => { e.stopPropagation(); onGenerate(cut); }} disabled={generating}
-              style={{ cursor: generating ? "default" : "pointer", display: "inline-flex", alignItems: "center", gap: 3, fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, fontWeight: 600, background: "#ffffffcc", color: "#7c4dff", border: "1px solid #7c4dff", padding: "2px 6px", borderRadius: 2, opacity: generating ? 0.5 : 1 }}>
-              <Wand2 size={9} /> AI생성
             </button>
             <div style={{ display: "inline-flex", alignItems: "center", gap: 3, fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, fontWeight: 600, background: "#ffffffcc", color: C.inkSoft, border: `1px solid ${C.line}`, padding: "2px 6px", borderRadius: 2 }}>
               <ImagePlus size={9} />{imageData ? "교체" : "업로드"}
@@ -206,17 +195,12 @@ function CutRow({ cut, imageData, onUpload, onCopyPrompt, copied, runningTime, o
                 style={{ width: "100%", fontSize: 11, lineHeight: 1.6, color: C.ink, background: "#fffdf8", border: `1px solid ${C.lineSoft}`, borderRadius: 2, padding: "6px 8px", resize: "vertical", fontFamily: "sans-serif", outline: "none" }}
               />
               <div style={{ fontSize: 10.5, lineHeight: 1.5, color: C.inkSoft }}>
-                이미지 품질·앵글이 마음에 안 들면, 프롬프트를 복사해 미드저니·다른 이미지 생성 AI에서 직접 활용해보세요.
+                이 프롬프트를 복사해 미드저니 등 다른 이미지 생성 AI에서 이미지를 만든 뒤, 좌측 이미지 영역을 클릭해 업로드하세요.
               </div>
               <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                 <button onClick={() => onCopyPrompt(cut)}
                   style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 600, background: "transparent", color: C.inkSoft, border: `1px solid ${C.line}`, padding: "4px 10px", borderRadius: 2 }}>
                   {copied ? <Check size={10} /> : <Copy size={10} />} {copied ? "복사됨" : "복사"}
-                </button>
-                <button onClick={() => onGenerate(cut)} disabled={generating}
-                  style={{ cursor: generating ? "default" : "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontFamily: "'Zilla Slab', serif", fontSize: 11, fontWeight: 700, background: "#7c4dff", color: "#fff", border: "none", padding: "4px 12px", borderRadius: 2, opacity: generating ? 0.6 : 1 }}>
-                  {generating ? <Loader2 size={10} style={{ animation: "spin 1s linear infinite" }} /> : <Wand2 size={10} />}
-                  {generating ? "생성 중…" : "이 프롬프트로 재생성"}
                 </button>
               </div>
             </div>
@@ -408,8 +392,6 @@ export default function StoryboardTool() {
   const [bgRef, setBgRef] = useState(null);      // {dataURL}
   const charFileRef = useRef(null);
   const bgFileRef = useRef(null);
-  const [generatingCuts, setGeneratingCuts] = useState(new Set()); // 생성 중인 컷 번호
-  const [generatingAll, setGeneratingAll] = useState(false);
 
   // 중단 컨트롤러
   const abortRef = useRef(null);
@@ -427,7 +409,7 @@ export default function StoryboardTool() {
   const videoFileRef = useRef(null);
 
   const step = gkontiText ? (cuts ? 3 : 2) : 1;
-  const isProcessing = loading1 || loading2 || generatingAll || generatingCuts.size > 0 || analyzingVideo;
+  const isProcessing = loading1 || loading2 || analyzingVideo;
 
   // ── 마운트 시 복원 ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -469,72 +451,6 @@ export default function StoryboardTool() {
     return () => clearTimeout(t);
   }, [saveData]);
 
-  // ── dataURL → Blob 변환 헬퍼 ──────────────────────────────────────────────
-  const dataURLtoBlob = (dataURL) => {
-    const [header, data] = dataURL.split(",");
-    const mime = header.match(/:(.*?);/)[1];
-    const binary = atob(data);
-    const arr = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
-    return new Blob([arr], { type: mime });
-  };
-
-  // ── OpenAI gpt-image-1 이미지 생성 ───────────────────────────────────────
-  const generateCutImage = async (cut) => {
-    abortRef.current = new AbortController();
-    const { signal } = abortRef.current;
-    setError("");
-    setGeneratingCuts(prev => new Set([...prev, cut.no]));
-    try {
-      const hasRefs = charRefs.length > 0 || bgRef;
-      let b64;
-
-      if (hasRefs) {
-        const formData = new FormData();
-        formData.append("model", "gpt-image-1");
-        formData.append("prompt", cut.prompt || cut.desc || "");
-        formData.append("size", "1536x1024");
-        formData.append("n", "1");
-        charRefs.forEach((ref, i) => {
-          formData.append("image[]", dataURLtoBlob(ref.dataURL), `char_${i}.png`);
-        });
-        if (bgRef) formData.append("image[]", dataURLtoBlob(bgRef.dataURL), "bg.png");
-
-        const res = await fetch("/api/openai/v1/images/edits", { method: "POST", body: formData, signal });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error?.message ?? `HTTP ${res.status}`);
-        b64 = json.data?.[0]?.b64_json;
-      } else {
-        const res = await fetch("/api/openai/v1/images/generations", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "gpt-image-1", prompt: cut.prompt || cut.desc || "", size: "1536x1024", n: 1 }),
-          signal,
-        });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error?.message ?? `HTTP ${res.status}`);
-        b64 = json.data?.[0]?.b64_json;
-      }
-
-      if (!b64) throw new Error("이미지 데이터 없음");
-      setPanelImages(prev => ({ ...prev, [cut.no]: `data:image/png;base64,${b64}` }));
-    } catch (e) {
-      if (!isAbort(e)) setError(`CUT ${cut.no} 생성 실패: ${e.message}`);
-    } finally {
-      setGeneratingCuts(prev => { const s = new Set(prev); s.delete(cut.no); return s; });
-    }
-  };
-
-  const generateAllCuts = async () => {
-    if (!cuts) return;
-    abortRef.current = new AbortController();
-    setGeneratingAll(true);
-    for (const cut of cuts) {
-      if (abortRef.current.signal.aborted) break;
-      await generateCutImage(cut);
-    }
-    setGeneratingAll(false);
-  };
 
   const addCharRef = (e) => {
     const file = e.target.files?.[0];
@@ -1097,11 +1013,6 @@ ${gkontiText}`;
                   {total.toFixed(1)}s · {cuts.length}컷 {!inRange && "⚠"}
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <button onClick={generateAllCuts} disabled={generatingAll || generatingCuts.size > 0}
-                    style={{ cursor: (generatingAll || generatingCuts.size > 0) ? "default" : "pointer", display: "inline-flex", alignItems: "center", gap: 6, background: "#7c4dff", color: "#fff", border: "none", padding: "7px 14px", borderRadius: 2, fontSize: 12, fontWeight: 700, fontFamily: "'Zilla Slab', serif", opacity: (generatingAll || generatingCuts.size > 0) ? 0.6 : 1 }}>
-                    {generatingAll ? <Loader2 size={12} style={{ animation: "spin 1s linear infinite" }} /> : <Wand2 size={12} />}
-                    {generatingAll ? "전체 생성 중…" : "전체 AI 생성"}
-                  </button>
                   <button onClick={exportJSON}
                     style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, background: "transparent", color: C.ink, border: `1.5px solid ${C.ink}`, padding: "7px 12px", borderRadius: 2, fontSize: 12, fontWeight: 600, fontFamily: "'IBM Plex Mono', monospace" }}>
                     <Download size={12} /> JSON
@@ -1137,7 +1048,7 @@ ${gkontiText}`;
                       return cuts.map(cut => {
                         running += Number(cut.sec) || 0;
                         return (
-                          <CutRow key={cut.no} cut={cut} imageData={panelImages[cut.no]} onUpload={handleImageUpload} onCopyPrompt={copyPrompt} copied={copiedNo === cut.no} runningTime={running} onGenerate={generateCutImage} generating={generatingCuts.has(cut.no)} onPromptChange={handlePromptChange} />
+                          <CutRow key={cut.no} cut={cut} imageData={panelImages[cut.no]} onUpload={handleImageUpload} onCopyPrompt={copyPrompt} copied={copiedNo === cut.no} runningTime={running} onPromptChange={handlePromptChange} />
                         );
                       });
                     })()}
