@@ -633,7 +633,7 @@ ${rawInput.trim()}`;
     abortRef.current = new AbortController();
     setLoading1(true); setError(""); setGkontiText(""); setCuts(null); setPanelImages({});
     try {
-      const text = await callClaude(buildStage1Prompt(), 2048, abortRef.current.signal);
+      const text = await callClaude(buildStage1Prompt(), 8000, abortRef.current.signal);
       if (!text.trim()) throw new Error("빈 응답");
       setGkontiText(text.trim());
     } catch (e) {
@@ -830,7 +830,9 @@ ${gkontiText}`;
   };
 
   const total = cuts?.reduce((s, c) => s + (Number(c.sec) || 0), 0) || 0;
-  const inRange = total >= 5 && total <= 15 && (!cuts || (cuts.length >= 6 && cuts.length <= 8));
+  const secTolerance = Math.max(2, seconds * 0.3);
+  const inRange = Math.abs(total - seconds) <= secTolerance
+    && (!cuts || !cutCount || cuts.length === Number(cutCount));
 
   return (
     <div style={{ minHeight: "100%", background: C.paper, color: C.ink, backgroundImage: "radial-gradient(#0000000a 0.5px, transparent 0.5px)", backgroundSize: "5px 5px", padding: "26px 20px 56px" }}>
