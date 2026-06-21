@@ -8,6 +8,12 @@ const C = {
 
 const SAMPLE = "비 내리는 버스 정류장. 소녀가 우산도 없이 홀로 서 있다. 버스가 그녀를 지나쳐 떠나고, 빗속에 혼자 남는다. 젖은 채로 천천히 하늘을 올려다보더니, 아주 작게 웃는다.";
 
+const BW_STORYBOARD_PREFIX = "Black and white storyboard sketch, rough pencil lines, cinematic composition, professional storyboard art.";
+function ensureBwPrefix(prompt) {
+  const p = (prompt || "").trim();
+  return p.startsWith(BW_STORYBOARD_PREFIX) ? p : `${BW_STORYBOARD_PREFIX} ${p}`.trim();
+}
+
 const SIZE_SCALE = {
   "L.S.": 0.22, "롱샷": 0.22, "F.S.": 0.6, "풀샷": 0.6,
   "니샷": 0.78, "K.S.": 0.78, "웨스트": 0.92, "W.S.": 0.92,
@@ -199,6 +205,9 @@ function CutRow({ cut, imageData, onUpload, onCopyPrompt, copied, runningTime, o
                 rows={4}
                 style={{ width: "100%", fontSize: 11, lineHeight: 1.6, color: C.ink, background: "#fffdf8", border: `1px solid ${C.lineSoft}`, borderRadius: 2, padding: "6px 8px", resize: "vertical", fontFamily: "sans-serif", outline: "none" }}
               />
+              <div style={{ fontSize: 10.5, lineHeight: 1.5, color: C.inkSoft }}>
+                이미지 품질·앵글이 마음에 안 들면, 프롬프트를 복사해 미드저니·다른 이미지 생성 AI에서 직접 활용해보세요.
+              </div>
               <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                 <button onClick={() => onCopyPrompt(cut)}
                   style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 600, background: "transparent", color: C.inkSoft, border: `1px solid ${C.line}`, padding: "4px 10px", borderRadius: 2 }}>
@@ -695,7 +704,7 @@ ${gkontiText}`;
       const s = clean.indexOf("{"), e = clean.lastIndexOf("}");
       const parsed = JSON.parse(clean.slice(s, e + 1));
       if (!parsed.cuts || !Array.isArray(parsed.cuts)) throw new Error("컷 데이터 없음");
-      setCuts(parsed.cuts);
+      setCuts(parsed.cuts.map(c => ({ ...c, prompt: ensureBwPrefix(c.prompt) })));
       setMetadata({ tone: parsed.tone, emotionArc: parsed.emotionArc });
     } catch (e) {
       if (!isAbort(e)) setError(`2단계 실패: ${e.message}`);
